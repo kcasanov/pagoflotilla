@@ -177,6 +177,11 @@
   <script>
     const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSpSS6bqKz8X7QdgLl_ifbOqixttW-7BVbYbpQbVipZUwpvmP3hjc-UjLEtAVXZ1aETBpEbxuV5FVvN/pub?gid=716656979&single=true&output=tsv";
 
+    function urlSinCache(url) {
+      const separador = url.includes("?") ? "&" : "?";
+      return url + separador + "cacheBust=" + Date.now();
+    }
+
     function limpiarNumero(valor) {
       if (!valor) return 0;
       return parseFloat(
@@ -191,7 +196,7 @@
 
     async function cargarDatos() {
       try {
-        const response = await fetch(SHEET_URL);
+        const response = await fetch(urlSinCache(SHEET_URL), { cache: "no-store" });
         const tsv = await response.text();
 
         Papa.parse(tsv, {
