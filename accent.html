@@ -123,6 +123,16 @@
       color: #fff !important;
     }
 
+    tr.fila-separadora td {
+      background-color: #101010 !important;
+      color: #58c45f !important;
+      text-align: center !important;
+      font-weight: 800 !important;
+      font-size: 15px !important;
+      border-top: 2px solid #58c45f !important;
+      border-bottom: 2px solid #58c45f !important;
+    }
+
     td.estado-pagado {
       background-color: #3b6f35 !important;
       color: #ffffff !important;
@@ -248,7 +258,7 @@
               pageLength: 20,
               paging: true,
               searching: true,
-              ordering: true,
+              ordering: false,
               fixedHeader: true,
               language: {
                 search: "Buscar semana:",
@@ -263,6 +273,18 @@
                 }
               },
               createdRow: function(row, rowData) {
+                const textoFila = rowData.join(" ").toLowerCase();
+
+                if (textoFila.includes("financiamiento opcional")) {
+                $(row).addClass("fila-separadora");
+                const cells = $('td', row);
+                cells.eq(0)
+                  .attr('colspan', headers.length)
+                  .text("Financiamiento opcional");
+                cells.slice(1).remove();
+                return;
+                }
+
                 const estadoIndex = headers.findIndex(h => h.toLowerCase() === "estado");
                 if (estadoIndex !== -1) {
                   const estado = String(rowData[estadoIndex] || "").trim().toLowerCase();
