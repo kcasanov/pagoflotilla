@@ -263,6 +263,36 @@
                 }
               },
               createdRow: function(row, rowData) {
+                const textoFila = rowData.join(" ").toLowerCase();
+
+                // Financiamiento opcional
+                if (textoFila.includes("financiamiento opcional")) {
+                $(row).addClass("fila-separadora");
+                const cells = $('td', row);
+
+                cells.eq(0)
+                .attr('colspan', headers.length)
+                .text("Financiamiento opcional");
+                cells.slice(1).remove();
+
+                return;
+                }
+                
+              // Semanas atrasadas
+              if (textoFila.includes("semanas atrasadas")) {
+              $(row).addClass("fila-separadora");
+              const cells = $('td', row);
+
+              cells.eq(0)
+              .attr('colspan', headers.length)
+              .text("Semanas atrasadas");
+
+              cells.slice(1).remove();
+              return;
+              }
+                
+                
+                
                 const estadoIndex = headers.findIndex(h => h.toLowerCase() === "estado");
                 if (estadoIndex !== -1) {
                   const estado = String(rowData[estadoIndex] || "").trim().toLowerCase();
