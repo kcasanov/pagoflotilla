@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resumen de Semana - AVANTE ROYSER</title>
+
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
+
+  <style>
+    body {
+      margin: 0;
+      background-color: #121212;
+      color: #f0f0f0;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 13px;
+    }
+
+    .container {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 24px 28px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #58c45f;
+      margin: 14px 0 8px;
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .sociedad {
+      text-align: center;
+      color: #aaa;
+      margin: 0 0 26px;
+      font-size: 12px;
+    }
+
+    #resumen {
+      background-color: #1f1f1f;
+      border: 1px solid #3a3a3a;
+      border-radius: 8px;
+      padding: 24px 18px;
+      margin-bottom: 24px;
+      min-height: 170px;
+      box-sizing: border-box;
+    }
+
+    #resumen p {
+      margin: 0 0 12px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .positivo {
+      color: #00e676;
+      font-weight: 800;
+    }
+
+    .negativo {
+      color: #ff5252;
+      font-weight: 800;
+    }
+
+    #loading {
+      text-align: center;
+      color: #aaa;
+      margin: 20px 0;
+      font-size: 16px;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table.dataTable {
+      width: 100% !important;
+      background-color: #1e1e1e;
+      color: #f0f0f0;
+      border-collapse: collapse;
+      border: 1px solid #444;
+      font-size: 13px;
+    }
+
+    table.dataTable th,
+    table.dataTable td {
+      white-space: nowrap;
+      padding: 10px 12px;
+      border-bottom: 1px solid #2a2a2a;
+    }
+
+    table.dataTable th {
+      background-color: #333;
+      color: #fff;
+      font-weight: 700;
+    }
+
+    table.dataTable td {
+      background-color: #1e1e1e;
+    }
+
+    .dataTables_wrapper,
+    .dataTables_wrapper .dataTables_length,
+    .dataTables_wrapper .dataTables_filter,
+    .dataTables_wrapper .dataTables_info,
+    .dataTables_wrapper .dataTables_paginate {
+      color: #fff !important;
+    }
+
+    .dataTables_wrapper .dataTables_filter input,
+    .dataTables_wrapper .dataTables_length select {
+      background-color: #333;
+      color: #fff;
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 6px;
+    }
+
+    .dataTables_wrapper .dataTables_paginate .paginate_button {
+      color: #fff !important;
+      border: 1px solid #444 !important;
+      background: #1f1f1f !important;
+      border-radius: 4px;
+      margin: 2px;
+    }
+
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+      background: #3c7d40 !important;
+      color: #fff !important;
+    }
+
+    td.estado-pagado {
+      background-color: #3b6f35 !important;
+      color: #ffffff !important;
+      font-weight: 700;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        padding: 16px 10px;
+      }
+
+      h1 {
+        font-size: 22px;
+      }
+
+      table.dataTable {
+        font-size: 12px;
+      }
+
+      table.dataTable th,
+      table.dataTable td {
+        padding: 8px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>Resumen de Semana - AVANTE ROYSER</h1>
+    <div class="sociedad">Sociedad de Responsabilidad Limitada · Cédula jurídica 3-102-118360</div>
+
+    <div id="resumen">
+      <p><strong id="semana_linea"></strong></p>
+      <p><strong>Ganancias Totales:</strong> <span id="ganancia"></span></p>
+      <p><strong>Adicionales:</strong> <span id="adicionales"></span></p>
+      <p><strong>Efectivo:</strong> <span id="efectivo"></span></p>
+      <p><strong>Cuota:</strong> <span id="cuota"></span></p>
+      <p><strong>Saldo Semana:</strong> <span id="saldo"></span></p>
+    </div>
+
+    <div id="loading">Cargando datos desde Google Sheets...</div>
+
+    <div class="table-wrap">
+      <table id="tablaPagos" class="display" style="display:none;"></table>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+  <script>
+    const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT12vc4ua1psLOMR1AV491A1ChJcnLgi9mWt9IY0vsjU-jXp5nKQPg2vlT9_NczSDuQcOiRQBZLV8wz/pub?gid=1641749147&single=true&output=tsv";
+
+    function urlSinCache(url) {
+      const separador = url.includes("?") ? "&" : "?";
+      return url + separador + "cacheBust=" + Date.now();
+    }
+
+    function normalizar(valor) {
+      return String(valor || "").replace(/^\uFEFF/, "").trim().toLowerCase();
+    }
+
+    function limpiarNumero(valor) {
+      if (!valor) return 0;
+      const numero = String(valor)
+        .replace(/[₡\s]/g, "")
+        .replace(/[−–]/g, "-")
+        .replace(/[^0-9,.-]/g, "");
+      const sinMiles = numero.includes(".") && numero.includes(",")
+        ? numero.replace(/,/g, "")
+        : numero.replace(/,/g, ".");
+      return parseFloat(sinMiles) || 0;
+    }
+
+    async function cargarDatos() {
+      try {
+        const response = await fetch(urlSinCache(SHEET_URL), { cache: "no-store" });
+        if (!response.ok) throw new Error("Respuesta HTTP " + response.status);
+        const tsv = await response.text();
+        if (/^\s*(?:<!doctype html|<html)/i.test(tsv)) {
+          throw new Error("Google devolvió una página HTML en vez de datos TSV.");
+        }
+        if (typeof Papa === "undefined" || !window.jQuery || !$.fn.DataTable) {
+          throw new Error("No se cargaron las bibliotecas necesarias para mostrar el plan.");
+        }
+
+        const results = Papa.parse(tsv, {
+          delimiter: "\t",
+          header: false,
+          skipEmptyLines: true
+        });
+        if (results.errors && results.errors.length) {
+          console.warn("Avisos al interpretar TSV:", results.errors);
+        }
+        const data = results.data.filter(row => row.some(cell => String(cell ?? "").trim() !== ""));
+
+        // El resumen siempre viene en las columnas A:B, aunque D:F tenga el recuadro del contrato.
+        const resumen = new Map();
+        for (const row of data) {
+          const nombre = normalizar(row[0]);
+          if (["semana #", "semana", "ganancias totales", "adicionales", "reembolsos", "efectivo", "cuota", "saldo semana"].includes(nombre)) {
+            resumen.set(nombre, String(row[1] ?? "").trim());
+          }
+        }
+        const obtener = (...nombres) => nombres.map(n => resumen.get(n)).find(v => v !== undefined) ?? "";
+        const semana = obtener("semana #", "semana");
+        document.getElementById("semana_linea").innerText = semana ? "Semana #" + semana : "";
+        document.getElementById("ganancia").innerText = obtener("ganancias totales");
+        document.getElementById("adicionales").innerText = obtener("adicionales", "reembolsos");
+        document.getElementById("efectivo").innerText = obtener("efectivo");
+        document.getElementById("cuota").innerText = obtener("cuota");
+        const saldoTexto = obtener("saldo semana");
+        const saldo = document.getElementById("saldo");
+        saldo.innerText = saldoTexto;
+        saldo.className = limpiarNumero(saldoTexto) >= 0 ? "positivo" : "negativo";
+
+        // Busca la cabecera real de pagos (fila 9), no los títulos del recuadro D1:F7.
+        const headerIndex = data.findIndex(row =>
+          normalizar(row[0]) === "semana" &&
+          row.some(cell => normalizar(cell) === "estado")
+        );
+        if (headerIndex === -1) {
+          throw new Error("No se encontró la tabla de pagos (encabezados Semana / Estado).");
+        }
+
+        const estadoIndex = data[headerIndex].findIndex(h => normalizar(h) === "estado");
+        const headers = data[headerIndex].slice(0, estadoIndex + 1).map(h => String(h ?? "").trim());
+        const rows = data.slice(headerIndex + 1)
+          .filter(row => /^\d+$/.test(String(row[0] ?? "").trim()))
+          .map(row => headers.map((_, i) => String(row[i] ?? "").trim()));
+
+        if (!rows.length) throw new Error("No se encontraron cuotas semanales en la hoja.");
+
+        $('#tablaPagos').DataTable({
+          data: rows,
+          columns: headers.map(h => ({ title: h })),
+          pageLength: 20,
+          paging: true,
+          searching: true,
+          ordering: true,
+          fixedHeader: true,
+          language: {
+            search: "Buscar semana:",
+            lengthMenu: "Mostrar _MENU_ registros",
+            zeroRecords: "No se encontró nada",
+            info: "Mostrando _TOTAL_ registros",
+            infoEmpty: "No hay registros",
+            infoFiltered: "(filtrado de _MAX_ totales)",
+            paginate: {
+              previous: "Anterior",
+              next: "Siguiente"
+            }
+          },
+          createdRow: function(row, rowData) {
+            const estado = normalizar(rowData[estadoIndex]);
+            if (estado === "pagado") {
+              $('td', row).eq(estadoIndex).addClass('estado-pagado');
+            }
+          }
+        });
+
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("tablaPagos").style.display = "table";
+      } catch (error) {
+        document.getElementById("loading").innerText = "Error al cargar los datos: " + error.message;
+        console.error("Error al cargar los datos del plan:", error);
+      }
+    }
+
+    cargarDatos();
+  </script>
+</body>
+</html>
