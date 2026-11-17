@@ -30,6 +30,7 @@
       font-weight: 700;
     }
 
+
     #resumen {
       background-color: #1f1f1f;
       border: 1px solid #3a3a3a;
@@ -157,7 +158,7 @@
     <div id="resumen">
       <p><strong id="semana_linea"></strong></p>
       <p><strong>Ganancias Totales:</strong> <span id="ganancia"></span></p>
-      <p><strong>Reembolsos:</strong> <span id="reembolso"></span></p>
+      <p><strong>Adicionales:</strong> <span id="adicionales"></span></p>
       <p><strong>Efectivo:</strong> <span id="efectivo"></span></p>
       <p><strong>Cuota:</strong> <span id="cuota"></span></p>
       <p><strong>Saldo Semana:</strong> <span id="saldo"></span></p>
@@ -182,104 +183,114 @@
       return url + separador + "cacheBust=" + Date.now();
     }
 
+    function normalizar(valor) {
+      return String(valor || "").replace(/^\uFEFF/, "").trim().toLowerCase();
+    }
+
     function limpiarNumero(valor) {
       if (!valor) return 0;
-      return parseFloat(
-        String(valor)
-          .replace("₡", "")
-          .replace(/\s/g, "")
-          .replace(/,/g, ".")
-          .replace("−", "-")
-          .replace(/[^0-9.\-]/g, "")
-      ) || 0;
+      const numero = String(valor)
+        .replace(/[₡\s]/g, "")
+        .replace(/[−–]/g, "-")
+        .replace(/[^0-9,.-]/g, "");
+      const sinMiles = numero.includes(".") && numero.includes(",")
+        ? numero.replace(/,/g, "")
+        : numero.replace(/,/g, ".");
+      return parseFloat(sinMiles) || 0;
     }
 
     async function cargarDatos() {
       try {
         const response = await fetch(urlSinCache(SHEET_URL), { cache: "no-store" });
+        if (!response.ok) throw new Error("Respuesta HTTP " + response.status);
         const tsv = await response.text();
+        if (/^\s*(?:<!doctype html|<html)/i.test(tsv)) {
+          throw new Error("Google devolvió una página HTML en vez de datos TSV.");
+        }
+        if (typeof Papa === "undefined" || !window.jQuery || !$.fn.DataTable) {
+          throw new Error("No se cargaron las bibliotecas necesarias para mostrar el plan.");
+        }
 
-        Papa.parse(tsv, {
+        const results = Papa.parse(tsv, {
           delimiter: "\t",
           header: false,
-          skipEmptyLines: true,
-          complete: function(results) {
-            const data = results.data.filter(row => row.some(cell => String(cell || "").trim() !== ""));
+          skipEmptyLines: true
+        });
+        if (results.errors && results.errors.length) {
+          console.warn("Avisos al interpretar TSV:", results.errors);
+        }
+        const data = results.data.filter(row => row.some(cell => String(cell ?? "").trim() !== ""));
 
-            const labels = data.map(row => String(row[0] || "").trim());
-            const vals = data.map(row => String(row[1] || "").trim());
+        // El resumen siempre viene en las columnas A:B, aunque D:F tenga el recuadro del contrato.
+        const resumen = new Map();
+        for (const row of data) {
+          const nombre = normalizar(row[0]);
+          if (["semana #", "semana", "ganancias totales", "adicionales", "reembolsos", "efectivo", "cuota", "saldo semana"].includes(nombre)) {
+            resumen.set(nombre, String(row[1] ?? "").trim());
+          }
+        }
+        const obtener = (...nombres) => nombres.map(n => resumen.get(n)).find(v => v !== undefined) ?? "";
+        const semana = obtener("semana #", "semana");
+        document.getElementById("semana_linea").innerText = semana ? "Semana #" + semana : "";
+        document.getElementById("ganancia").innerText = obtener("ganancias totales");
+        document.getElementById("adicionales").innerText = obtener("adicionales", "reembolsos");
+        document.getElementById("efectivo").innerText = obtener("efectivo");
+        document.getElementById("cuota").innerText = obtener("cuota");
+        const saldoTexto = obtener("saldo semana");
+        const saldo = document.getElementById("saldo");
+        saldo.innerText = saldoTexto;
+        saldo.className = limpiarNumero(saldoTexto) >= 0 ? "positivo" : "negativo";
 
-            const semanaIndex = labels.findIndex(x => x.toLowerCase() === "semana #" || x.toLowerCase() === "semana");
-            if (semanaIndex !== -1) {
-              document.getElementById("semana_linea").innerText = "Semana #" + vals[semanaIndex];
+        // Busca la cabecera real de pagos (fila 9), no los títulos del recuadro D1:F7.
+        const headerIndex = data.findIndex(row =>
+          normalizar(row[0]) === "semana" &&
+          row.some(cell => normalizar(cell) === "estado")
+        );
+        if (headerIndex === -1) {
+          throw new Error("No se encontró la tabla de pagos (encabezados Semana / Estado).");
+        }
+
+        const estadoIndex = data[headerIndex].findIndex(h => normalizar(h) === "estado");
+        const headers = data[headerIndex].slice(0, estadoIndex + 1).map(h => String(h ?? "").trim());
+        const rows = data.slice(headerIndex + 1)
+          .filter(row => /^\d+$/.test(String(row[0] ?? "").trim()))
+          .map(row => headers.map((_, i) => String(row[i] ?? "").trim()));
+
+        if (!rows.length) throw new Error("No se encontraron cuotas semanales en la hoja.");
+
+        $('#tablaPagos').DataTable({
+          data: rows,
+          columns: headers.map(h => ({ title: h })),
+          pageLength: 20,
+          paging: true,
+          searching: true,
+          ordering: true,
+          fixedHeader: true,
+          language: {
+            search: "Buscar semana:",
+            lengthMenu: "Mostrar _MENU_ registros",
+            zeroRecords: "No se encontró nada",
+            info: "Mostrando _TOTAL_ registros",
+            infoEmpty: "No hay registros",
+            infoFiltered: "(filtrado de _MAX_ totales)",
+            paginate: {
+              previous: "Anterior",
+              next: "Siguiente"
             }
-
-            const totalIndex = labels.findIndex(x => x.toLowerCase() === "ganancias totales");
-            if (totalIndex !== -1) {
-              document.getElementById("ganancia").innerText = vals[totalIndex] || "";
-              document.getElementById("reembolso").innerText = vals[totalIndex + 1] || "";
-              document.getElementById("efectivo").innerText = vals[totalIndex + 2] || "";
-              document.getElementById("cuota").innerText = vals[totalIndex + 3] || "";
-
-              const saldoTexto = vals[totalIndex + 4] || "";
-              const saldoNumero = limpiarNumero(saldoTexto);
-
-              document.getElementById("saldo").innerText = saldoTexto;
-              document.getElementById("saldo").className = saldoNumero >= 0 ? "positivo" : "negativo";
+          },
+          createdRow: function(row, rowData) {
+            const estado = normalizar(rowData[estadoIndex]);
+            if (estado === "pagado") {
+              $('td', row).eq(estadoIndex).addClass('estado-pagado');
             }
-
-            const headerIndex = data.findIndex(row =>
-              row.some(cell => String(cell || "").trim().toLowerCase() === "semana") &&
-              row.some(cell => String(cell || "").trim().toLowerCase() === "estado")
-            );
-
-            if (headerIndex === -1) {
-              throw new Error("No se encontró el encabezado de la tabla.");
-            }
-
-            const headers = data[headerIndex].map(h => String(h || "").trim());
-            const rows = data
-              .slice(headerIndex + 1)
-              .filter(row => row.length && String(row[0] || "").trim() !== "");
-
-            $('#tablaPagos').DataTable({
-              data: rows,
-              columns: headers.map(h => ({ title: h })),
-              pageLength: 20,
-              paging: true,
-              searching: true,
-              ordering: true,
-              fixedHeader: true,
-              language: {
-                search: "Buscar semana:",
-                lengthMenu: "Show _MENU_ entries",
-                zeroRecords: "No se encontró nada",
-                info: "Mostrando _TOTAL_ registros",
-                infoEmpty: "No hay registros",
-                infoFiltered: "(filtrado de _MAX_ totales)",
-                paginate: {
-                  previous: "Anterior",
-                  next: "Siguiente"
-                }
-              },
-              createdRow: function(row, rowData) {
-                const estadoIndex = headers.findIndex(h => h.toLowerCase() === "estado");
-                if (estadoIndex !== -1) {
-                  const estado = String(rowData[estadoIndex] || "").trim().toLowerCase();
-                  if (estado === "pagado") {
-                    $('td', row).eq(estadoIndex).addClass('estado-pagado');
-                  }
-                }
-              }
-            });
-
-            document.getElementById("loading").style.display = "none";
-            document.getElementById("tablaPagos").style.display = "table";
           }
         });
+
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("tablaPagos").style.display = "table";
       } catch (error) {
-        document.getElementById("loading").innerText = "Error al cargar los datos. Revisa el link TSV o la estructura de la hoja.";
-        console.error(error);
+        document.getElementById("loading").innerText = "Error al cargar los datos: " + error.message;
+        console.error("Error al cargar los datos del plan:", error);
       }
     }
 
